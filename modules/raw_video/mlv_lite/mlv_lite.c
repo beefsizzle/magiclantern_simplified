@@ -1575,7 +1575,15 @@ int setup_buffers()
     /* discard old full-size buffers */
     fullsize_buffers[0] = fullsize_buffers[1] = 0;
 
-    if (fullres_buf_size > 20 * 1024 * 1024 - 1024 && !OUTPUT_COMPRESSION)
+    if (get_digic_version() == 8 && !OUTPUT_COMPRESSION)
+    {
+        /* DIGIC 8: Canon programs the raw EDMAC address every frame, so
+         * raw_lv_redirect_edmac() has no effect and a second buffer would
+         * never be written. Copy every frame from Canon's buffer instead. */
+        printf("DIGIC 8: single buffering (Canon's raw buffer).\n");
+        fullsize_buffers[0] = UNCACHEABLE(raw_info.buffer);
+    }
+    else if (fullres_buf_size > 20 * 1024 * 1024 - 1024 && !OUTPUT_COMPRESSION)
     {
         /* large buffers? assume single-buffering is safe for uncompressed output */
         printf("Using single buffering (check with Show EDMAC).\n");
@@ -2066,7 +2074,37 @@ unsigned int raw_rec_polling_cbr(unsigned int unused)
     }
 
     /* reallocate buffers if needed (only if not recording) */
-    if (realloc && (RAW_IS_IDLE || RAW_IS_PREPARING) && gui_state == GUISTATE_IDLE)
+    /* reallocate if no buffer is allocated while idle (theBilalFakhouri,
+     * M50: "No memory suites" after stopping a recording) */
+    if (!shoot_mem_suite && !srm_mem_suite && (RAW_IS_IDLE || RAW_IS_PREPARING))
+    {
+        realloc = 1;
+    }
+
+    /* DIGIC 8: Canon allocates the raw LV buffer from shoot memory each time
+     * LV is set up again (e.g. when the ML menu closes: it runs on a Canon
+     * dialog that stops LV). Allocating our buffers before that froze the
+     * camera, so wait until LV has been idle for 2 s... */
+    static int lv_idle_since = 0;
+    if (gui_state != GUISTATE_IDLE || gui_menu_shown() || !liveview_display_idle())
+    {
+        lv_idle_since = get_ms_clock();
+    }
+    int lv_settled = get_ms_clock() - lv_idle_since > 2000;
+
+    /* ... and don't keep them while LV is interrupted: LV and its raw
+     * buffer are set up again when that ends, which froze the camera with
+     * our buffers still allocated */
+    if (get_digic_version() == 8 && !lv_settled && RAW_IS_IDLE && (shoot_mem_suite || srm_mem_suite))
+    {
+        take_semaphore(settings_sem, 0);
+        free_buffers();
+        give_semaphore(settings_sem);
+        printf("LV interrupted: buffers released.\n");
+        realloc = 1;
+    }
+
+    if (realloc && (RAW_IS_IDLE || RAW_IS_PREPARING) && gui_state == GUISTATE_IDLE && lv_settled)
     {
         gui_uilock(UILOCK_EVERYTHING);
         take_semaphore(settings_sem, 0);
@@ -2950,7 +2988,10 @@ unsigned int FAST raw_rec_vsync_cbr(unsigned int unused)
     if (buffer_full) return 0;
     
     /* double-buffering */
-    raw_lv_redirect_edmac(fullsize_buffers[fullsize_buffer_pos % 2]);
+    if (fullsize_buffers[0] != fullsize_buffers[1])
+    {
+        raw_lv_redirect_edmac(fullsize_buffers[fullsize_buffer_pos % 2]);
+    }
 
     /* advance to next buffer for the upcoming capture */
     int next_fullsize_buffer_pos = (fullsize_buffer_pos + 1) % 2;
