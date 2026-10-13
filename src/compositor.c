@@ -29,6 +29,7 @@
 #include "dryos.h"
 #include "bmp.h"
 #include "compositor.h"
+#include "propvalues.h"
 
 #ifdef CONFIG_COMPOSITOR_DEDICATED_LAYER
 /**
@@ -166,6 +167,114 @@ extern uint32_t XOC_SetLayerEnable(int p1, int p2, uint layer, int p4);
  * Since XCM defaults to 0 on a new layer, we ommit this call.
  */
 
+#ifdef CONFIG_COMPOSITOR_LAYER_LV_ONLY
+/*
+ * M200: with ML's layer present, switching between scene / art modes (LV
+ * preview rendered with effects) and P/Tv/Av/M left the LV image frozen
+ * until power cycle. The layer is only attached while LV runs, and its
+ * bitmap only exists while attached, so Canon has that memory back when it
+ * rebuilds the display for another mode. Outside LV, ML draws on Canon's
+ * GUI layer.
+ */
+static int lv_layer_id = -1;
+static int lv_layer_attached = 0;
+static struct MARV *canon_gui_marv = NULL;
+static void *lv_layer_raw = NULL;
+static int lv_layer_free_countdown = 0;
+static int lv_layer_alloc_failed = 0;   /* retry after the next LV start */
+extern struct semaphore *winsys_sem;
+
+static int lv_layer_alloc()
+{
+    if (lv_layer_raw)
+        return 1;
+    lv_layer_raw = malloc(BMP_VRAM_SIZE * 4 + 0x100);
+    if (!lv_layer_raw)
+        return 0;
+    /* aligned to 0x100 and uncacheable, as _compositor_create_layer() */
+    pNewLayer->bitmap_data = UNCACHEABLE((uint8_t *)((((uintptr_t)lv_layer_raw + 0x100) >> 8) << 8));
+    return 1;
+}
+
+static void lv_layer_free()
+{
+    if (!lv_layer_raw)
+        return;
+    pNewLayer->bitmap_data = NULL;
+    free(lv_layer_raw);
+    lv_layer_raw = NULL;
+}
+
+static void lv_layer_attach()
+{
+    lv_layer_free_countdown = 0;
+    if (!lv_layer_alloc())
+    {
+        lv_layer_alloc_failed = 1;
+        return;
+    }
+
+    /* drop what we drew on Canon's layer while detached */
+    rgba_erase_own_pixels();
+
+    take_semaphore(winsys_sem, 0);
+    XCM_SetSourceSurface(_pXCM, lv_layer_id, pNewLayer);
+    XCM_SetSourceArea(_pXCM, lv_layer_id, -BMP_W_MINUS, -BMP_H_MINUS, BMP_W_PLUS + BMP_W_MINUS, BMP_H_PLUS + BMP_H_MINUS);
+    XOC_SetLayerEnable(0, 0, lv_layer_id, 1);
+    give_semaphore(winsys_sem);
+
+    bzero32(pNewLayer->bitmap_data, BMP_VRAM_SIZE * 4);
+    rgb_vram_info = pNewLayer;
+    _rgb_vram_layer_id = lv_layer_id;
+    lv_layer_attached = 1;
+    rgba_shadow_invalidate();
+    _compositor_force_redraw();
+}
+
+static void lv_layer_detach()
+{
+    take_semaphore(winsys_sem, 0);
+    XCM_SetSourceSurface(_pXCM, lv_layer_id, NULL);
+    give_semaphore(winsys_sem);
+
+    rgb_vram_info = canon_gui_marv;
+    _rgb_vram_layer_id = CANON_GUI_LAYER_ID;
+    lv_layer_attached = 0;
+    rgba_shadow_invalidate();
+    _compositor_force_redraw();
+
+    /* free the bitmap once Canon has rebuilt its context without it */
+    lv_layer_free_countdown = 10;   /* x 50 ms */
+}
+
+/* called from the redraw task (bmp.c), every 50 ms */
+void compositor_lv_layer_step()
+{
+    static int lv_since = 0;
+
+    if (lv_layer_id < 0 || !canon_gui_marv)
+        return;
+
+    if (lv_layer_free_countdown && --lv_layer_free_countdown == 0)
+        lv_layer_free();
+
+    if (!lv)
+    {
+        lv_since = 0;
+        lv_layer_alloc_failed = 0;
+        if (lv_layer_attached)
+            lv_layer_detach();
+        return;
+    }
+
+    int now = get_ms_clock();
+    if (!lv_since)
+        lv_since = now;
+    if (!lv_layer_attached && !lv_layer_alloc_failed && now - lv_since >= 1000)
+        lv_layer_attach();
+}
+#endif
+
 /*
  * Create a new VRAM (MARV) structure, alloc buffer for VRAM.
  * Call compositor to enable newly created layer.
@@ -195,11 +304,32 @@ int compositor_layer_setup()
     uint32_t bmp_h = BMP_H_PLUS - BMP_H_MINUS;
 
     // create layer
+#ifdef CONFIG_COMPOSITOR_LAYER_LV_ONLY
+    /* MARV only; the bitmap is allocated when the layer gets attached */
+    pNewLayer = malloc(sizeof(struct MARV));
+    if (pNewLayer)
+    {
+        pNewLayer->signature    = 0x5652414D;  // MARV
+        pNewLayer->bitmap_data  = NULL;
+        pNewLayer->opacity_data = 0x0;
+        pNewLayer->flags        = XIMR_FLAGS_LAYER_RGBA;
+        pNewLayer->width        = bmp_w;
+        pNewLayer->height       = bmp_h;
+        pNewLayer->pmem         = 0x0;
+    }
+#else
     pNewLayer = _compositor_create_layer(bmp_w, bmp_h);
+#endif
     if(pNewLayer == NULL){
         DryosDebugMsg(0, 15, "Failed to create a new layer. Falling back to _rgb_vram_info");
         return 1;
     }
+#ifdef CONFIG_COMPOSITOR_LAYER_LV_ONLY
+    /* attached / detached by compositor_lv_layer_step() */
+    lv_layer_id = newLayerID;
+    canon_gui_marv = rgb_vram_info;     /* Canon GUI layer, from rgb_vram_preinit() */
+    return 0;
+#endif
     /*
      * The code below seems to be R specific. RP/R6 seems to use single struct
      * for that.

@@ -5,6 +5,14 @@
 /** This camera has a DIGIC VIII chip */
 #define CONFIG_DIGIC_VIII
 
+/** Push every XCM context to XimrExe, like Canon's refreshVrmsSurface, not
+ * only the first one: after switching scene / art mode <-> P/Tv/Av/M the LV
+ * image stayed black otherwise. */
+#define CONFIG_XCM_EXEC_ALL_CONTEXTS
+
+/** Attach ML's XCM layer only while LiveView runs (see compositor.c) */
+#define CONFIG_COMPOSITOR_LAYER_LV_ONLY
+
 /** LiveView's EVF_STATE uses Canon's newer state framework, not
  * CreateStateObject, so the state object hooks don't apply. */
 //#define CONFIG_STATE_OBJECT_HOOKS

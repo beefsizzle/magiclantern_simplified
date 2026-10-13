@@ -75,6 +75,8 @@ inline uint8_t *rgb_vram_preinit()
 }
 
 void refresh_yuv_from_rgb(void);
+void rgba_shadow_invalidate(void);
+void rgba_erase_own_pixels(void);
 void refresh_yuv_from_rgb_task(void *);
 uint32_t indexed2rgb(uint8_t color);
 

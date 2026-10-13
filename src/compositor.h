@@ -5,6 +5,9 @@
 #include "bmp.h"
 
 int compositor_layer_setup();
+#ifdef CONFIG_COMPOSITOR_LAYER_LV_ONLY
+void compositor_lv_layer_step();
+#endif
 
 /**
  * Really D8, DX -> 6, D7 -> 8, D6 -> either 7 or 8 depending on Zico fw.
@@ -67,6 +70,9 @@ extern int _rgb_vram_layer_id; // = CANON_GUI_LAYER_ID;
 #ifdef CONFIG_COMPOSITOR_XCM
 extern void* _pXCM;
 extern struct MARV *XCM_GetSourceSurface(void *pXCM, uint32_t layer_id);
+#ifdef CONFIG_XCM_EXEC_ALL_CONTEXTS
+extern void *XCM_GetContext(void *pXCM, uint32_t index);
+#endif
 #endif
 
 #endif

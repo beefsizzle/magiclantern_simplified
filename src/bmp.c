@@ -265,6 +265,14 @@ void refresh_yuv_from_rgb(void)
     // trigger Ximr to render to OSD from RGB buffer
 #ifdef CONFIG_DIGIC_VI
     XimrExe((void *)XIMR_CONTEXT);
+#elif defined(CONFIG_XCM_EXEC_ALL_CONTEXTS)
+    // Canon's refreshVrmsSurface runs XimrExe on every context XCM made;
+    // some display modes need more than the first one.
+    take_semaphore(winsys_sem, 0);
+    void *ctx;
+    for (int i = 0; (ctx = XCM_GetContext(_pXCM, i)) != NULL; i++)
+        XimrExe(ctx);
+    give_semaphore(winsys_sem);
 #else
     take_semaphore(winsys_sem, 0);
     XimrExe((void *)XIMR_CONTEXT);
@@ -276,6 +284,24 @@ void rgba_buffer_clear()
 {
     if (rgb_vram_info == NULL) return;
     bzero32(rgb_vram_info->bitmap_data, BMP_VRAM_SIZE*4);
+}
+
+/* the next RGBA refresh must be a full copy (target layer changed) */
+void rgba_shadow_invalidate()
+{
+}
+
+/* Clear the pixels ML drew on the current RGBA layer (Canon's GUI layer when
+ * our own layer is detached), leaving Canon's other pixels alone. */
+void rgba_erase_own_pixels()
+{
+    if (rgb_vram_info == NULL || bmp_vram_indexed == NULL) return;
+    uint32_t *dst = (uint32_t *)rgb_vram_info->bitmap_data;
+    for (size_t n = 0; n < BMP_VRAM_SIZE; n++)
+    {
+        if (bmp_vram_indexed[n] != 0)
+            dst[n] = 0;
+    }
 }
 
 #if defined(CONFIG_INSTALLER)
@@ -294,6 +320,10 @@ void refresh_yuv_from_rgb_task(void *unused)
     #endif
     TASK_LOOP
     {
+        #ifdef CONFIG_COMPOSITOR_LAYER_LV_ONLY
+        compositor_lv_layer_step();
+        #endif
+
         if (ml_refresh_display_needed && !ml_shutdown_requested && DISPLAY_IS_ON)
         {
             refresh_yuv_from_rgb();
