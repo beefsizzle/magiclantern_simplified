@@ -45,6 +45,11 @@
 /** disable SRM for now */
 #define CONFIG_MEMORY_SRM_NOT_WORKING
 
+/** 10-bit raw LV: hook edmac_set_size to shorten the raw row length
+ * (edmac-raw-patch.c, needs CONFIG_MMU_REMAP); 12-bit uses the Mem1Path
+ * width instead (raw.c) */
+#define CONFIG_EDMAC_RAW_PATCH
+
 /** "All shoot memory" (shoot_malloc_suite(0), used by mlv_lite) is this many
  * MB instead of autodetected. The autodetect makes requests that fail, and
  * Canon keeps a failed request queued until enough memory is free; when

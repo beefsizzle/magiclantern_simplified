@@ -2696,6 +2696,19 @@ static int mem1_set_bpp(int bpp)
     const uint32_t S = RAW_LV_MEM1_STATE_ADDR;
     const uint32_t PACK = PackMode_Field_ADDR_For_RAW_LV_EDMAC_CHANNEL;
 
+    #if defined(CONFIG_EDMAC_RAW_PATCH)
+    extern int edmac_raw_patch_install();
+    extern void edmac_raw_patch_set_bpp(int bpp);
+    extern int edmac_raw_patch_get_bpp();
+    if (edmac_raw_patch_get_bpp() != 14)
+    {
+        uint32_t old = cli();
+        MEM(PACK) = 2;
+        edmac_raw_patch_set_bpp(14);
+        sei(old);
+    }
+    #endif
+
     /* back to Canon's values first */
     if (mem1_field)
     {
@@ -2724,7 +2737,21 @@ static int mem1_set_bpp(int bpp)
 
     int fake = mem1_fake_width(w, bpp);
     if (!field || !fake)
+    {
+        #if defined(CONFIG_EDMAC_RAW_PATCH)
+        /* no exact width (e.g. 10-bit at 2096): shorten the row length in
+         * edmac_set_size instead (platform edmac-raw-patch.c, MMU remap) */
+        if (edmac_raw_patch_install() == 0)
+        {
+            uint32_t old = cli();
+            MEM(PACK) = (bpp == 12) ? 1 : 0;
+            edmac_raw_patch_set_bpp(bpp);
+            sei(old);
+            return bpp;
+        }
+        #endif
         return 14;
+    }
 
     uint32_t old = cli();
     MEM(PACK) = (bpp == 12) ? 1 : 0;
