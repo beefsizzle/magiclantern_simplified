@@ -35,7 +35,7 @@
 static uint8_t generic_mmu_space[MMU_PAGE_SIZE + MMU_L1_TABLE_SIZE
                                  + 0x300 + MMU_L2_TABLE_SIZE
                                  + sizeof(struct mmu_L2_page_info)]
-               __attribute__((aligned(0x10000)));
+               __attribute__((aligned(0x10000), section(".bss.mmu")));
 #endif
 
 #include "platform/mmu_patches.h"

@@ -118,7 +118,9 @@ SECTIONS
     /* BSS segment to be zeroed */
     . = ALIGN(64);
     _bss_start = .;
-    .bss : { *(.bss) }
+    /* .bss.mmu first: patch_mmu.c's 64 kB aligned MMU space, placed before
+     * the rest of .bss to keep the alignment padding small */
+    .bss : { *(.bss.mmu) *(.bss) }
     . = ALIGN(64);
     _bss_end = .;
 
