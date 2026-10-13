@@ -3920,7 +3920,9 @@ abort_and_check_early_stop:
 cleanup:
     if (f)
         finish_chunk(f, card_index);
-    if (!written_total[card_index]
+    /* on an early stop raw_movie_filename may still name the previous clip;
+     * only remove the file if this run created it */
+    if (f && !written_total[card_index]
         && raw_movie_filename != NULL)
     {
         FIO_RemoveFile(raw_movie_filename);
