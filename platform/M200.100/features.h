@@ -22,6 +22,12 @@
 // Zebras from the LV image (luma/RGB); focus peaking needs display filters
 #define FEATURE_ZEBRA
 
+// Remap ROM pages to RAM (for code patches). Canon copies its 0x4900-byte
+// MMU tables from 0xE0000000 (copy_mmu_tables E005B090), TTBR0 = table +
+// 0x4800 + cpu * 0x80 (E005B110 -> change_mmu_tables E058D0DC).
+#define CONFIG_SGI_HANDLERS
+#define CONFIG_MMU_REMAP
+
 // We can't yet rely on image capture.
 #define CONFIG_IMAGE_CAPTURE_NOT_WORKING
 
