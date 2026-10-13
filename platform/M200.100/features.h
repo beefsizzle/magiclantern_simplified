@@ -28,6 +28,9 @@
 #define CONFIG_SGI_HANDLERS
 #define CONFIG_MMU_REMAP
 
+// Raw LV via Mem1Path / EDMAC ch3 (see consts.h)
+#define CONFIG_RAW_LIVEVIEW
+
 // We can't yet rely on image capture.
 #define CONFIG_IMAGE_CAPTURE_NOT_WORKING
 

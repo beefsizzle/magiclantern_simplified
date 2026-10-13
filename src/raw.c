@@ -1099,6 +1099,12 @@ int raw_update_params_work()
         skip_right  = zoom ? 0 : 8;
         #endif
 
+        #if defined(CONFIG_M200)
+        /* optical black: 88 columns left, 34 rows top (FHD and 4K modes) */
+        skip_top    = 34;
+        skip_left   = 88;
+        #endif
+
         dbg_printf("LV raw buffer: %x (%dx%d)\n", raw_info.buffer, width, height);
         dbg_printf("Skip left:%d right:%d top:%d bottom:%d\n", skip_left, skip_right, skip_top, skip_bottom);
 #endif
@@ -1405,6 +1411,8 @@ int raw_update_params_work()
          * warning: this may exceed 16383!
          */
         int shad_gain = shamem_read(SHAD_GAIN_REGISTER);
+        if (shad_gain <= 0)
+            shad_gain = 3444;   /* register unknown on this camera: no correction */
 
         raw_info.white_level -= raw_info.black_level;
         raw_info.white_level = raw_info.white_level * 3444 / shad_gain; /* 0.25 EV correction, so LiveView matches CR2 exposure */
@@ -2643,6 +2651,7 @@ void raw_lv_request_bpp(int bpp)
 {
     take_semaphore(raw_sem, 0);
 
+#if defined(CONFIG_DIGIC_45) || defined(CONFIG_200D) || defined(CONFIG_6D2) || defined(CONFIG_7D2)
     /* raw bit depth setup is done from PACK32_MODE register (mask 0x131) */
     #if defined(CONFIG_DIGIC_45)
         const uint32_t PACK32_MODE = 0xC0F08094;
@@ -2695,6 +2704,9 @@ void raw_lv_request_bpp(int bpp)
         /* fixme: after switching bit depth, EDMAC needs 1-2 frames to settle */
         wait_lv_frames(2);
     }
+#else
+    /* no known way to change the raw bit depth on this camera: stays 14-bit */
+#endif
 
     give_semaphore(raw_sem);
 }

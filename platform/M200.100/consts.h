@@ -138,6 +138,16 @@
 
 #define YUV422_HD_BUFFER_DMA_ADDR 0x0 // it expects this to be shamem_read(some_DMA_ADDR)
 
+// Raw LV (Mem1Path, LiveViewDrive::Mem1Path.c): EDMAC write channel 3, as on
+// M50 (theBilalFakhouri's M50_rawvideo branch). After lv_set_mm(1) and
+// lv_save_raw(1), ch3 ram_addr (+0xA0) = Mem1Path's buffer, yb_xb (+0x50) =
+// 0x048B0E54 (1164 rows x 3668 bytes in FHD), PackUnpack MMIO 0xD0422224 =
+// 0xC0100020 (14-bit, as M50).
+#define RAW_LV_EDMAC_CHANNEL_ADDR 0xd0420200
+// Not identified on M200 (M50/200D use an unverified 0xD0008030). 0 makes
+// shamem_read() return 0, and raw.c then skips the correction.
+#define SHAD_GAIN_REGISTER 0x0
+
 // LiveView frame counter (read only). Canon's EvfDev registers a base frame
 // rate callback (RegisterBaseFrameRateCBR E067BB46, from evfdevSyncStart
 // E0081BBA) at E0081528, which increments 0x9308+0xC (FUN_e068db3a) once per
