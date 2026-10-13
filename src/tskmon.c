@@ -205,6 +205,18 @@ static void tskmon_stack_checker(struct task *next_task)
             return; // uses 264 of 512, 248 free
         #endif
 
+        #if defined(CONFIG_M200)
+        /* Canon tasks running close to their stack size by design */
+        if (streq(task_name, "HeartBeat0") && free > 192)
+            return; // uses 280 of 512 (as on M6II)
+        if (streq(task_name, "TempSvc") && free > 160)
+            return; // uses 560 of 768
+        if (streq(task_name, "FmidTask") && free > 64)
+            return; // file task: 76..156 free, lowest during heavy card I/O
+        if (streq(task_name, "GlobalVector") && free > 160)
+            return; // uses 800 of 1024
+        #endif
+
         bmp_printf(FONT(FONT_MED, free < 128 ? COLOR_RED : COLOR_WHITE, COLOR_BLACK), 0, 0, 
             "[%d] %s: stack %s: free=%d used=%d ",
             id, task_name,

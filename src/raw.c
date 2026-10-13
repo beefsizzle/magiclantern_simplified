@@ -466,6 +466,15 @@ static int get_default_white_level()
      -797, 10000,    2424, 10000,   7010, 10000
 #endif
 
+#ifdef CONFIG_M200 // from https://github.com/LibRaw/LibRaw src/tables/colordata.cpp
+    // { LIBRAW_CAMERAMAKER_Canon, "EOS M200", 0, 0,
+    //   { 10463,-2173,-1437,-4856,12635,2482,-1216,2915,7237 } },
+    #define CAM_COLORMATRIX1 \
+    10463, 10000,   -2173, 10000,  -1437, 10000, \
+    -4856, 10000,   12635, 10000,   2482, 10000, \
+    -1216, 10000,    2915, 10000,   7237, 10000
+#endif
+
 #ifdef CONFIG_M6II // from https://github.com/LibRaw/LibRaw src/tables/colordata.cpp
     // 	{ LIBRAW_CAMERAMAKER_Canon, "EOS M6 Mark II", 0, 0,
     //    { 11498,-3759,-1516,-5073,12954,2349,-892,1867,6118 } }, },
@@ -628,6 +637,13 @@ static int dynamic_ranges[] = {1333, 1218, 1255, 1127, 1038, 939, 845, 747, 643,
  *  For now I just copied R
  */
 #ifdef CONFIG_M50
+static int dynamic_ranges[] = {1255, 1237, 1188, 1120, 1045, 964, 883, 785, 685, 599};
+#endif
+
+/** M200 data missing from DxO.
+ *  For now copied R, like M50 / M6 II.
+ */
+#ifdef CONFIG_M200
 static int dynamic_ranges[] = {1255, 1237, 1188, 1120, 1045, 964, 883, 785, 685, 599};
 #endif
 

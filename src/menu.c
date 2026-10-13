@@ -4918,10 +4918,20 @@ static int menu_ensure_canon_dialog()
     // apparently it's the MPU that decides to turn off the underlying Canon dialog
     // so we have to keep poking it to stay awake
     static int last_refresh = 0;
+    #if defined(BGMT_USER_ACTIVITY)
+    /* the dialog closes after a while without user activity: send the event
+     * Canon gets before each key press (re-requesting the GUI mode redraws
+     * the screen instead) */
+    if (lv && should_run_polling_action(5000, &last_refresh))
+    {
+        GUI_Control(BGMT_USER_ACTIVITY, 0, 1, 0);
+    }
+    #else
     if (lv && should_run_polling_action(2000, &last_refresh))
     {
         SetGUIRequestMode(GUIMODE_ML_MENU);
     }
+    #endif
 #endif
 
 #endif
@@ -6123,6 +6133,7 @@ struct longpress
     int short_btn_unpress;  /* optional: unpress code */
     int (*long_cbr)();      /* optional: function to tell whether long press/unpress should be sent */
     int (*short_cbr)();     /* optional: function to tell whether short press/unpress should be sent */
+    int short_outside_menu; /* optional: also send the short press when the ML menu is closed */
     int pos_x;              /* where to draw the animated indicator */
     int pos_y;              /* coords: BMP space (0,0 - 720,480 on most models) */
 };
@@ -6197,7 +6208,7 @@ static void longpress_check(int timer, void * opaque)
     }
     else if (longpress->count < 15 && !longpress->pressed)
     {
-        if (!gui_menu_shown())
+        if (!gui_menu_shown() && !longpress->short_outside_menu)
         {
             return;
         }
@@ -6258,11 +6269,14 @@ static struct longpress q_longpress = {
 };
 #endif
 
-#if defined(CONFIG_EOSM)
+#if defined(CONFIG_EOSM) || defined(CONFIG_M200)
 static struct longpress erase_longpress = {
     .long_btn_press     = BGMT_TRASH,           /* long press (500ms) opens ML menu */
     .short_btn_press    = BGMT_PRESS_DOWN,      /* short press => do a regular "down/erase" */
     .short_btn_unpress  = BGMT_UNPRESS_DOWN,
+    #ifdef CONFIG_M200
+    .short_outside_menu = 1,                    /* DOWN is the INFO key, Canon needs it in LV */
+    #endif
     .pos_x = 670,   /* in LiveView */
     .pos_y = 343,   /* above ExpSim */
 };
@@ -6482,8 +6496,8 @@ int handle_longpress_events(struct event * event)
     }
 #endif
 
-#if defined(CONFIG_EOSM)
-    /* also trigger menu by a long press on ERASE (DOWN) */
+#if defined(CONFIG_EOSM) || defined(CONFIG_M200)
+    /* also trigger menu by a long press on ERASE (DOWN); INFO on M200 */
     if (event->param == BGMT_PRESS_DOWN)
     {
         if (gui_state == GUISTATE_IDLE && !gui_menu_shown() && !IS_FAKE(event))
