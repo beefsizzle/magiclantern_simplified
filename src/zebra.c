@@ -379,6 +379,19 @@ static CONFIG_INT( "spotmeter.position",        spotmeter_position, 1 ); // fixe
  */
 
 
+/* Buffer that overlays draw into. On FEATURE_VRAM_RGBA cams, bmp_vram_real()
+ * is Canon's RGBA layer, while ML draws 8-bit indexed pixels into bmp_vram()
+ * and refresh_yuv_from_rgb() converts them; indexed values written into the
+ * RGBA layer don't show up. */
+static inline uint8_t * overlay_bvram(void)
+{
+#ifdef FEATURE_VRAM_RGBA
+    return bmp_vram();
+#else
+    return bmp_vram_real();
+#endif
+}
+
 static uint8_t* bvram_mirror_start = 0;
 static uint8_t* bvram_mirror = 0;
 uint8_t* get_bvram_mirror() { return bvram_mirror; }
@@ -803,7 +816,7 @@ static void FAST draw_zebras_raw_lv()
 {
     if (!raw_update_params()) return;
 
-    uint8_t * const bvram = bmp_vram_real();
+    uint8_t * const bvram = overlay_bvram();
     if (!bvram) return;
     uint8_t * const bvram_mirror = get_bvram_mirror();
     if (!bvram_mirror) return;
@@ -1163,7 +1176,7 @@ static int zebra_digic_dirty = 0;
 
 static void draw_zebras( int Z )
 {
-    uint8_t * const bvram = bmp_vram_real();
+    uint8_t * const bvram = overlay_bvram();
     int zd = Z && zebra_draw && (lv_luma_is_accurate() || PLAY_OR_QR_MODE) && (zebra_rec || NOT_RECORDING); // when to draw zebras
     if (zd)
     {
@@ -1709,12 +1722,17 @@ draw_zebra_and_focus( int Z, int F )
 {
     if (unlikely(!get_global_draw())) return 0;
 
-    uint8_t * const bvram = bmp_vram_real();
+    uint8_t * const bvram = overlay_bvram();
     if (unlikely(!bvram)) return 0;
     if (unlikely(!bvram_mirror)) return 0;
     
     #ifdef FEATURE_ZEBRA
     draw_zebras(Z);
+    #ifdef FEATURE_VRAM_RGBA
+    /* zebras write the indexed buffer directly, so request the conversion */
+    if (Z)
+        ml_refresh_display_needed = 1;
+    #endif
     #endif
     
     #ifdef FEATURE_FOCUS_PEAK
@@ -4601,7 +4619,7 @@ static void show_overlay()
     }
 
     get_yuv422_vram();
-    uint8_t * const bvram = bmp_vram_real();
+    uint8_t * const bvram = overlay_bvram();
     if (!bvram) return;
     
     clrscr();
