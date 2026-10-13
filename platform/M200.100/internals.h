@@ -45,6 +45,14 @@
 /** disable SRM for now */
 #define CONFIG_MEMORY_SRM_NOT_WORKING
 
+/** "All shoot memory" (shoot_malloc_suite(0), used by mlv_lite) is this many
+ * MB instead of autodetected. The autodetect makes requests that fail, and
+ * Canon keeps a failed request queued until enough memory is free; when
+ * Canon allocates at the same time (raw LV buffers on every LV setup), the
+ * queued request blocks Canon's next allocation and the camera freezes.
+ * Movie LV has ~63-67 MB free; 48 MB froze too. */
+#define CONFIG_SHOOT_MALLOC_FIXED_MAX 32
+
 /** Q and SET are one button: long press SET in the ML menu = Q (submenus) */
 #define CONFIG_LONG_PRESS_SET_MENU
 

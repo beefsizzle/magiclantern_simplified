@@ -294,7 +294,13 @@ struct memSuite *_shoot_malloc_suite(size_t size)
     else
     {
         /* allocate as much as we can */
+        #ifdef CONFIG_SHOOT_MALLOC_FIXED_MAX
+        /* no autodetect: its failing requests stay queued in Canon's
+         * allocator (see the camera's internals.h) */
+        size_t max_size = CONFIG_SHOOT_MALLOC_FIXED_MAX * 1024 * 1024;
+        #else
         size_t max_size = shoot_malloc_autodetect();
+        #endif
         struct memSuite * hSuite = shoot_malloc_suite_int(max_size);
         shoot_full_suite = hSuite;
         return hSuite;
@@ -306,6 +312,11 @@ struct memSuite * _shoot_malloc_suite_contig(size_t size)
 {
     //qprintf("_shoot_malloc_suite_contig(%x)\n", size);
 
+    #ifdef CONFIG_SHOOT_MALLOC_FIXED_MAX
+    /* no autodetect; size 0 means the fixed size, as shoot_malloc_suite(0) */
+    if (size == 0)
+        size = CONFIG_SHOOT_MALLOC_FIXED_MAX * 1024 * 1024;
+    #else
     if (size == 0 || size > 1024*1024)
     {
         /* check whether we can allocate a block with the requested size */
@@ -322,6 +333,7 @@ struct memSuite * _shoot_malloc_suite_contig(size_t size)
             size = max_size;
         }
     }
+    #endif
 
     /* we now know for sure how much to allocate */
     //qprintf("_shoot_malloc_suite_contig(trying %x)\n", size);
