@@ -225,3 +225,30 @@ void _engio_write(uint32_t* reg_list)
 {
    return;
 }
+
+/** For mlv_lite and bench **/
+
+/* SRM doesn't work (CONFIG_MEMORY_SRM_NOT_WORKING); mlv_lite then uses
+ * shoot memory only. */
+struct memSuite *srm_malloc_suite(int num_requested_buffers)
+{
+    return 0; // always fail
+}
+
+void srm_free_suite(struct memSuite *suite)
+{
+}
+
+/* Canon dialog handler mlv_lite compares against to detect a card error
+ * dialog. Not identified on M200; only its address is used. */
+void ErrCardForLVApp_handler()
+{
+}
+
+#ifndef FEATURE_SCREENSHOT
+/* bench saves a screenshot after each benchmark */
+int take_screenshot(char *filename, uint32_t mode)
+{
+    return 0;
+}
+#endif
