@@ -13,6 +13,12 @@
 /** Attach ML's XCM layer only while LiveView runs (see compositor.c) */
 #define CONFIG_COMPOSITOR_LAYER_LV_ONLY
 
+/** Only write changed pixels to the RGBA layer (bmp.c) */
+#define CONFIG_RGBA_REFRESH_DIFF
+
+/** ML menu redraw and RGBA refresh exclude each other (bmp.c) */
+#define CONFIG_RGBA_REFRESH_LOCKED
+
 /** LiveView's EVF_STATE uses Canon's newer state framework, not
  * CreateStateObject, so the state object hooks don't apply. */
 //#define CONFIG_STATE_OBJECT_HOOKS

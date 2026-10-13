@@ -4989,7 +4989,18 @@ menu_redraw_task()
             
             if (!menu_redraw_blocked)
             {
+                #ifdef CONFIG_RGBA_REFRESH_LOCKED
+                /* the RGBA refresh waits while we draw, so it never shows a
+                 * half-drawn menu; a private semaphore, not bmp_lock: menu
+                 * update functions may wait for module locks whose holders
+                 * take bmp_lock */
+                extern struct semaphore *rgba_draw_sem;
+                if (rgba_draw_sem) take_semaphore(rgba_draw_sem, 0);
                 menu_redraw_do();
+                if (rgba_draw_sem) give_semaphore(rgba_draw_sem);
+                #else
+                menu_redraw_do();
+                #endif
             }
         }
     }

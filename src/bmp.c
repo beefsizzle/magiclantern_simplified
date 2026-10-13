@@ -109,11 +109,22 @@ void bmp_draw_to_idle(int value) { bmp_idle_flag = value; }
 #ifdef FEATURE_VRAM_RGBA
 struct MARV *rgb_vram_info = NULL;
 static uint8_t *bmp_vram_indexed = NULL;
+#ifdef CONFIG_RGBA_REFRESH_DIFF
+#ifndef RGBA_FULL_REFRESH_EVERY
+#define RGBA_FULL_REFRESH_EVERY 8
+#endif
+static uint8_t *bmp_vram_shadow = NULL;  /* indexed pixels last written to RGBA */
+static int rgba_shadow_valid = 0;
+static int rgba_refresh_count = 0;
+#endif
 // SJE what is an appropriate priority for this task?
 TASK_CREATE( "redraw_task", refresh_yuv_from_rgb_task, 0, 0x1e, 0x1000 );
 #endif
 // SJE should this global live in bmp.c?
 uint32_t ml_refresh_display_needed = 0;
+#ifdef CONFIG_RGBA_REFRESH_LOCKED
+struct semaphore *rgba_draw_sem = NULL;   /* ML menu redraw vs RGBA refresh */
+#endif
 
 /** Returns a pointer to currently selected BMP vram (real or mirror) */
 uint8_t * bmp_vram(void)
@@ -213,6 +224,35 @@ void refresh_yuv_from_rgb(void)
 
 #if !defined(CONFIG_INSTALLER)
     if(zebra_should_run()){
+#ifdef CONFIG_RGBA_REFRESH_DIFF
+        /* Writes to the RGBA layer can be slow (~37 ms for a full 960x540
+         * copy on M200): only write 4-pixel groups that changed since the
+         * last refresh, with a full copy every RGBA_FULL_REFRESH_EVERY
+         * refreshes to bring back anything Canon drew over. */
+        if (!bmp_vram_shadow)
+            bmp_vram_shadow = malloc(BMP_VRAM_SIZE);
+        if (bmp_vram_shadow)
+        {
+            int full = !rgba_shadow_valid || ++rgba_refresh_count >= RGBA_FULL_REFRESH_EVERY;
+            if (full)
+                rgba_refresh_count = 0;
+            const uint32_t *src = (const uint32_t *)b;
+            uint32_t *shadow = (uint32_t *)bmp_vram_shadow;
+            for (size_t n = 0; n < BMP_VRAM_SIZE / 4; n++, rgb_data += 4)
+            {
+                uint32_t v = src[n];
+                if (!full && v == shadow[n])
+                    continue;
+                shadow[n] = v;
+                rgb_data[0] = indexed2rgb(v & 0xFF);
+                rgb_data[1] = indexed2rgb((v >> 8) & 0xFF);
+                rgb_data[2] = indexed2rgb((v >> 16) & 0xFF);
+                rgb_data[3] = indexed2rgb(v >> 24);
+            }
+            rgba_shadow_valid = 1;
+        }
+        else
+#endif
         // always draw our stuff, including full alpha
         for (size_t n = 0; n < BMP_VRAM_SIZE; n++){
             *rgb_data++ = indexed2rgb(*b);
@@ -220,6 +260,9 @@ void refresh_yuv_from_rgb(void)
         }
     }
     else{
+#ifdef CONFIG_RGBA_REFRESH_DIFF
+        rgba_shadow_valid = 0;  /* this path skips transparent pixels */
+#endif
 #endif
 #if defined(CONFIG_DIGIC_X) && !defined(CONFIG_COMPOSITOR_DEDICATED_LAYER)
         // kitor FIXME this is the loop altered to work with 2048x1080 layers.
@@ -284,11 +327,17 @@ void rgba_buffer_clear()
 {
     if (rgb_vram_info == NULL) return;
     bzero32(rgb_vram_info->bitmap_data, BMP_VRAM_SIZE*4);
+#ifdef CONFIG_RGBA_REFRESH_DIFF
+    rgba_shadow_valid = 0;
+#endif
 }
 
 /* the next RGBA refresh must be a full copy (target layer changed) */
 void rgba_shadow_invalidate()
 {
+#ifdef CONFIG_RGBA_REFRESH_DIFF
+    rgba_shadow_valid = 0;
+#endif
 }
 
 /* Clear the pixels ML drew on the current RGBA layer (Canon's GUI layer when
@@ -299,7 +348,12 @@ void rgba_erase_own_pixels()
     uint32_t *dst = (uint32_t *)rgb_vram_info->bitmap_data;
     for (size_t n = 0; n < BMP_VRAM_SIZE; n++)
     {
-        if (bmp_vram_indexed[n] != 0)
+        int ours = bmp_vram_indexed[n] != 0;
+#ifdef CONFIG_RGBA_REFRESH_DIFF
+        if (bmp_vram_shadow && rgba_shadow_valid && bmp_vram_shadow[n])
+            ours = 1;
+#endif
+        if (ours)
             dst[n] = 0;
     }
 }
@@ -326,7 +380,19 @@ void refresh_yuv_from_rgb_task(void *unused)
 
         if (ml_refresh_display_needed && !ml_shutdown_requested && DISPLAY_IS_ON)
         {
+            #ifdef CONFIG_RGBA_REFRESH_LOCKED
+            /* don't convert a half-drawn ML menu (no double buffering on
+             * RGBA cams); skip this cycle if the menu redraw holds the lock */
+            if (rgba_draw_sem && take_semaphore(rgba_draw_sem, 200) != 0)
+            {
+                msleep(50);
+                continue;
+            }
+            #endif
             refresh_yuv_from_rgb();
+            #ifdef CONFIG_RGBA_REFRESH_LOCKED
+            if (rgba_draw_sem) give_semaphore(rgba_draw_sem);
+            #endif
         }
         msleep(50); // max 20 fps refresh
     }
@@ -1508,6 +1574,9 @@ static void bmp_init(void* unused)
 {
     bmp_lock = CreateRecursiveLock(NULL);
     ASSERT(bmp_lock)
+    #ifdef CONFIG_RGBA_REFRESH_LOCKED
+    rgba_draw_sem = create_named_semaphore("rgba_draw", 1);
+    #endif
     bvram_mirror_init();
 #ifdef FEATURE_VRAM_RGBA
     bmp_vram_indexed = malloc(BMP_VRAM_SIZE);
