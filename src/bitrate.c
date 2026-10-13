@@ -653,3 +653,129 @@ bitrate_task( void* unused )
 TASK_CREATE("bitrate_task", bitrate_task, 0, 0x1d, 0x1000 );
 
 #endif // FEATURE_NITRATE
+
+#ifdef CONFIG_REC_INDICATOR_FROM_PROPS
+/* Recording indicator for cameras where the MVR struct is not known (M200):
+ * clip length from the ms clock, bitrate from how fast Canon's free space
+ * property drops while recording (it updates every ~3 s), and time left on
+ * the card from both. Reads nothing from the encoder. */
+#include "fio-ml.h"
+
+static int rec_elapsed_s = 0;
+static int rec_kbps = 0;            /* average since the first free space update */
+static int rec_card_left_s = -1;
+
+static void rec_indicator_task()
+{
+    int start_ms = 0;
+    int base_ms = 0;
+    int base_free = 0;
+    int last_free = -1;
+
+    TASK_LOOP
+    {
+        msleep(250);
+
+        if (!RECORDING_H264)
+        {
+            start_ms = base_ms = 0;
+            last_free = -1;
+            rec_elapsed_s = rec_kbps = 0;
+            rec_card_left_s = -1;
+            continue;
+        }
+
+        int now = get_ms_clock();
+        if (!start_ms)
+            start_ms = now;
+        int elapsed_s = (now - start_ms) / 1000;
+        if (elapsed_s != rec_elapsed_s)
+        {
+            rec_elapsed_s = elapsed_s;
+            lens_display_set_dirty();   /* info bars only redraw on changes */
+        }
+
+        int free_32k = get_free_space_32k(get_shooting_card());
+        if (free_32k == last_free)
+            continue;
+
+        if (last_free >= 0 && !base_ms)
+        {
+            /* first update after recording started: reference point */
+            base_ms = now;
+            base_free = free_32k;
+        }
+        else if (base_ms && now - base_ms >= 1000)
+        {
+            /* 32 KiB = 262.144 kbit; keep the math in 32 bits */
+            int used_32k = base_free - free_32k;
+            rec_kbps = used_32k * 2621 / ((now - base_ms) / 100);
+            if (rec_kbps > 0)
+                rec_card_left_s = free_32k / 10 * 2621 / rec_kbps;
+        }
+        last_free = free_32k;
+    }
+}
+
+TASK_CREATE("rec_indicator", rec_indicator_task, 0, 0x1d, 0x800);
+
+static LVINFO_UPDATE_FUNC(rec_time_update)
+{
+    LVINFO_BUFFER(8);
+    if (!RECORDING_H264)
+        return;
+    snprintf(buffer, sizeof(buffer), "%d:%02d", rec_elapsed_s / 60, rec_elapsed_s % 60);
+    item->color_fg = COLOR_RED;
+}
+
+static LVINFO_UPDATE_FUNC(rec_bitrate_update)
+{
+    LVINFO_BUFFER(8);
+    if (!RECORDING_H264 || rec_kbps <= 0)
+        return;
+    snprintf(buffer, sizeof(buffer), "%dMb/s", (rec_kbps + 500) / 1000);
+}
+
+static LVINFO_UPDATE_FUNC(rec_card_left_update)
+{
+    LVINFO_BUFFER(8);
+    if (!RECORDING_H264 || rec_card_left_s < 0)
+        return;
+    int m = rec_card_left_s / 60;
+    if (m >= 60)
+        snprintf(buffer, sizeof(buffer), "%dh%02d", m / 60, m % 60);
+    else
+        snprintf(buffer, sizeof(buffer), "%dm", m);
+}
+
+static struct lvinfo_item rec_info_items[] = {
+    {
+        .name = "Rec time",
+        .which_bar = LV_TOP_BAR_ONLY,
+        .update = rec_time_update,
+        .preferred_position = 120,
+        .priority = 1,
+    },
+    {
+        .name = "Rec bitrate",
+        .which_bar = LV_TOP_BAR_ONLY,
+        .update = rec_bitrate_update,
+        .preferred_position = 125,
+        .priority = 1,
+    },
+    {
+        .name = "Rec card left",
+        .which_bar = LV_TOP_BAR_ONLY,
+        .update = rec_card_left_update,
+        .preferred_position = 127,
+        .priority = 1,
+    },
+};
+
+static void rec_indicator_init()
+{
+    lvinfo_add_items(rec_info_items, COUNT(rec_info_items));
+}
+
+INIT_FUNC("rec_indicator", rec_indicator_init);
+#endif // CONFIG_REC_INDICATOR_FROM_PROPS

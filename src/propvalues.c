@@ -161,6 +161,10 @@ bool FAST is_movie_mode()
             && get_expsim() == 2  // movie enabled, but photo display is considered photo mode
             #endif
         ;
+    #elif defined(CONFIG_M200)
+    /* in movie mode PROP_SHOOTING_MODE is 0x14, while PROP_SHOOTING_MODE_2
+     * keeps the movie exposure mode (3 = M, 0 = auto) */
+    return shooting_mode_custom == SHOOTMODE_MOVIE;
     #else
     return shooting_mode == SHOOTMODE_MOVIE;
     #endif
@@ -281,7 +285,9 @@ PROP_HANDLER(PROP_HDMI_CHANGE_CODE)
     hdmi_vars_update();
 }
 
-#ifdef CONFIG_50D
+#if defined(CONFIG_50D) || defined(CONFIG_M200)
+/* M200: PROP_MVR_REC_START never fires; PROP_SHOOTING_TYPE is 3 in LV and
+ * 4 while recording a movie, as on 50D */
 int __recording = 0;
 int shooting_type = 0;
 PROP_HANDLER(PROP_SHOOTING_TYPE)
@@ -289,13 +295,15 @@ PROP_HANDLER(PROP_SHOOTING_TYPE)
     shooting_type = buf[0];
     __recording = (shooting_type == 4 ? 2 : 0);
 }
+#endif
 
+#ifdef CONFIG_50D
 PROP_HANDLER(PROP_MOVIE_SIZE_50D)
 {
     video_mode_resolution = buf[0];
     video_mode_fps = 30;
 }
-#else
+#elif !defined(CONFIG_M200)
 volatile PROP_INT(PROP_MVR_REC_START, __recording);
 volatile PROP_INT(PROP_SHOOTING_TYPE, shooting_type);
 #endif

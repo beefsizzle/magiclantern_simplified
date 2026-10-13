@@ -19,6 +19,10 @@
 /** ML menu redraw and RGBA refresh exclude each other (bmp.c) */
 #define CONFIG_RGBA_REFRESH_LOCKED
 
+/** MVR struct unknown: recording time, bitrate and card time left come from
+ * the clock and Canon's free space property (bitrate.c) */
+#define CONFIG_REC_INDICATOR_FROM_PROPS
+
 /** H.264 is encoded in hardware: redraw zebras more often while recording */
 #define ZEBRA_RECORDING_SLOWDOWN 2
 
