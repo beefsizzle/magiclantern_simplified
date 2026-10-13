@@ -136,6 +136,11 @@ static int is_zoom_mode_so_no_zebras()
 { 
     if (!lv) return 0;
     if (lv_dispsize == 1) return 0;     /* always on in x1 */
+    #ifdef CONFIG_DIGIC_678X
+    /* M200: x5 and x10 give the same 1:1 raw window, so with raw video x10
+     * is a crop recording mode as well (bars, recorder status, framing) */
+    if (lv_dispsize == 10 && raw_lv_is_enabled()) return 0;
+    #endif
     if (lv_dispsize > 5) return 1;      /* always disable in x10 zoom and also in the special x1 mode from some recent models (0x81) */
     if (raw_lv_is_enabled()) return 0;  /* exception: in raw mode we can record crop videos */
     

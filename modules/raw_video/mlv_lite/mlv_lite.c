@@ -3435,9 +3435,10 @@ void raw_video_rec_task(uint32_t card_index)
         mlv_chunk = 0;
         buffer_full = 0;
 
-        if (lv_dispsize == 10)
+        if (lv_dispsize == 10 && get_digic_version() <= 5)
         {
-            /* assume x10 is for focusing */
+            /* assume x10 is for focusing (on DIGIC 6+ x5 and x10 can be
+             * the same 1:1 raw window, used as a crop mode) */
             /* todo: detect x5 preset in crop_rec? */
             set_lv_zoom(1);
         }
