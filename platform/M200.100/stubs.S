@@ -289,3 +289,28 @@ DATA_PTR(0xE028, LiveViewApp_dialog)          /* M200: where StartLiveViewApp st
  **/
 
 // fsuDecodePartitionTable: implemented in function_overrides.c (inlined on D8), as on M6II             // inlined like in EOS R. See R180 function_overrides.c for WIP alternative
+
+/** EDMAC mem2mem (edmac-d8.c), names from theBilalFakhouri's M50_rawvideo
+ * branch. M200 functions identified from Canon's own users: Mem1Path (raw LV,
+ * LiveViewDrive::Mem1Path.c ~E07CB270), Engine::MemoryToMemoryEsub5.c
+ * (init E066B2C8, start E066B382, term E066B352) and Warp::CommonLib.c
+ * (E0667544 lock, E0667608/E0667610 wake/suspend, E066756E unlock).
+ * All asserts in Engine::Edmac.c. */
+THUMB_FN(0xE0570E16, edmac_set_address)             /* (ch, addr): writes ch+0xA0; Mem1Path (3, S+0x58) */
+THUMB_FN(0xE0570E22, edmac_set_size)                /* (ch, edmac_info*): writes ch+0x48..+0x70; Mem1Path */
+THUMB_FN(0xE0571284, edmac_set_transfer_mode)       /* (ch, 0..3): ch+0xC0 low bits; esub5 size step */
+THUMB_FN(0xE0570C36, StartEDmac_maybe)              /* (ch): esub5 start, WR then RD */
+THUMB_FN(0xE05703BA, ConnectReadEDmac_maybe)        /* (rd ch): esub5 start after StartEDmac(RD) */
+THUMB_FN(0xE05704CA, edmac_reset_channel)           /* (ch): esub5 init, both channels */
+THUMB_FN(0xE057093E, edmac_reset_boomer_vdkick)     /* (ch): esub5 init, WR before select */
+THUMB_FN(0xE05709B6, edmac_select_boomer)           /* (ch, selector): esub5 init (0xC2060A + n), Mem1Path (3, S+0xC) */
+THUMB_FN(0xE05705D0, RegisterEDmacCompleteCBR)      /* (ch, cbr, ctx): ch+0x3C = 1, hooks interrupt; esub5 init */
+THUMB_FN(0xE05708F0, UnregisterEDmacCompleteCBR)    /* (ch): ch+0x3C = 0, default cbr; esub5 term */
+THUMB_FN(0xE0570A8E, edmac_reset_packunpack_mode)   /* (ch): esub5 init, both channels */
+THUMB_FN(0xE0570A4A, edmac_stop_boomer_maybe)       /* (ch): esub5 term, WR */
+THUMB_FN(0xE0571D4C, SetPackUnpackForEdmacWriteChannel) /* (ch, config[5]): Mem1Path (3, S+0x6C) */
+THUMB_FN(0xE0577E12, CreateResLockEntry)            /* (res ids, count): CommonLib E0667544, Mem1Path EngRscLock */
+THUMB_FN(0xE0577FFA, LockEngineResources)           /* (entry): CommonLib E0667544 */
+THUMB_FN(0xE0578094, UnLockEngineResources)         /* (entry): CommonLib E066756E, ShtVfx TermMem2MemPath */
+THUMB_FN(0xE06E7DFA, PwrMng_WakeSubChips)           /* (list, 7-terminated): CommonLib E0667608, MvRawProPath */
+THUMB_FN(0xE06E7E28, PwrMng_SuspendSubChips)        /* (list): CommonLib E0667610 */
