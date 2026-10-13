@@ -724,7 +724,9 @@ PROP_HANDLER(PROP_LV_DISPSIZE)
 
     if (new_zoom != zoom)
     {
-        prop_request_change(PROP_LV_DISPSIZE, &new_zoom, 4);
+        /* len 0: the camera's length (4 bytes on most, 8 on M200) */
+        uint32_t z[2] = { new_zoom, 0 };
+        prop_request_change(PROP_LV_DISPSIZE, z, 0);
     }
 #endif
 #endif
@@ -744,7 +746,9 @@ void set_lv_zoom(int zoom)
     if (hs) SW1(0,0);
     gui_uilock(UILOCK_EVERYTHING);
     #endif
-    prop_request_change_wait(PROP_LV_DISPSIZE, &zoom, 4, 1000);
+    /* len 0: the camera's length (4 bytes on most, 8 on M200) */
+    uint32_t z[2] = { zoom, 0 };
+    prop_request_change_wait(PROP_LV_DISPSIZE, z, 0, 1000);
     #ifdef CONFIG_ZOOM_HALFSHUTTER_UILOCK
     gui_uilock(UILOCK_NONE);
     if (hs) SW1(1,0);
@@ -2366,7 +2370,8 @@ int handle_zoom_x5_x10(struct event * event)
 
         if (new_zoom)
         {
-            prop_request_change(PROP_LV_DISPSIZE, &new_zoom, 4);
+            uint32_t z[2] = { new_zoom, 0 };    /* len 0: 4 or 8 bytes per camera */
+            prop_request_change(PROP_LV_DISPSIZE, z, 0);
             return 0;
         }
     }

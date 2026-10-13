@@ -1150,12 +1150,13 @@ static void flip_zoom_twostage(int stage)
     if (stage == 1)
     {
         zoom0 = lv_dispsize;
-        int zoom1 = zoom0 == 5 ? 10 : 5;
-        prop_request_change_wait(PROP_LV_DISPSIZE, &zoom1, 4, 100);
+        uint32_t zoom1[2] = { zoom0 == 5 ? 10 : 5, 0 };    /* len 0: 4 or 8 bytes per camera */
+        prop_request_change_wait(PROP_LV_DISPSIZE, zoom1, 0, 100);
     }
     else if (stage == 2)
     {
-        prop_request_change_wait(PROP_LV_DISPSIZE, &zoom0, 4, 1000);
+        uint32_t z[2] = { zoom0, 0 };
+        prop_request_change_wait(PROP_LV_DISPSIZE, z, 0, 1000);
     }
 }
 
