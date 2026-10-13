@@ -2504,6 +2504,181 @@ void FAST raw_preview_fast()
     raw_preview_fast_ex((void*)-1, (void*)-1, -1, -1, -1);
 }
 
+/* one pixel from ML's packed raw format (14/12/10-bit: 8 pixels in bpp bytes,
+ * a bit stream in 16-bit words, MSB first; see struct raw_pixblock) */
+static inline int raw_unpack_pixel(const uint8_t * line, int x, int bpp)
+{
+    const uint16_t * w = (const uint16_t *)(line + (x / 8) * bpp);
+    int bit = (x % 8) * bpp;
+    int i = bit >> 4;
+    int s = bit & 15;
+    uint32_t v = (uint32_t)w[i] << 16;
+    if (s + bpp > 16)
+        v |= w[i + 1];
+    return (v >> (32 - s - bpp)) & ((1 << bpp) - 1);
+}
+
+/* ML's own overlay view is showing (M200: Canon's clean screen). Unlike
+ * zebra_should_run(), this does not turn off at x10 zoom. */
+int raw_preview_ml_view()
+{
+#ifdef LV_OVERLAYS_MODE
+    /* Canon's clean screen with ML overlays enabled; unlike get_global_draw()
+     * this stays true while recording (the bars were painted over then) */
+    extern int get_global_draw_setting();
+    return lv && get_global_draw_setting() && LV_OVERLAYS_MODE == 3;
+#else
+    extern int liveview_display_idle();
+    extern int get_global_draw();
+    return liveview_display_idle() && get_global_draw();
+#endif
+}
+
+/* Gray framing preview of the raw area (rx, ry, rw, rh), drawn into the ML
+ * overlay over the whole LiveView area, letterboxed, in 2x2 blocks. For
+ * cameras without Canon's display filter (DIGIC 6+), e.g. M200 magnify, where
+ * Canon's screen shows a different area than the one recorded. Any bit depth
+ * ML packs. Levels follow the scene (98th percentile of the previous frame).
+ * The area (hx, hy, hw, hh) is left transparent, so a Canon touch button
+ * under it stays visible and usable (hw = 0: none).
+ * Returns the time taken in ms, or < 0 if nothing was drawn (-1 no buffer,
+ * -2 bad area / levels, -3 bit depth, -4 area outside the raw image). */
+int raw_preview_gray_bmp(int rx, int ry, int rw, int rh, int hx, int hy, int hw, int hh)
+{
+    uint8_t * bvram = bmp_vram();
+    const uint8_t * buf = raw_info.buffer;
+    int bpp = raw_info.bits_per_pixel;
+    int black = raw_info.black_level;
+    int white = raw_info.white_level;
+    if (!bvram || !buf)
+        return -1;
+    if (rw <= 0 || rh <= 0 || white <= black)
+        return -2;
+    if (bpp != 14 && bpp != 12 && bpp != 10)
+        return -3;
+    /* raw_info keeps 14-bit levels when Canon packs 12/10-bit (mlv_lite
+     * scales them for the MLV header): bring them to this bit depth */
+    if (bpp < 14 && white >= (1 << bpp))
+    {
+        black >>= 14 - bpp;
+        white >>= 14 - bpp;
+    }
+    if (rx < 0 || ry < 0 || rx + rw > raw_info.width || ry + rh > raw_info.height)
+        return -4;
+
+    int t0 = get_ms_clock();
+
+    /* 0..1023 (fraction of the scene's bright level) -> COLOR_GRAY ramp, gamma 1/2 */
+    static uint8_t lut[1024];
+    if (!lut[1023])
+        for (int i = 0; i < 1024; i++)
+            lut[i] = COLOR_GRAY(0) + (int)(sqrtf(i / 1023.0f) * 41.0f + 0.5f);
+
+    /* bright level from the previous frame; at least 1/64 of the range,
+     * so a black frame shows noise as dark gray, not as white */
+    static int hi = 0;
+    int range = white - black;
+    if (hi <= 0 || hi > range)
+        hi = range;
+    hi = MAX(hi, range / 64);
+    int gain = (1023 << 16) / hi;           /* v * gain >> 16 = 0..1023 */
+    static uint32_t hist[256];              /* of v * 255 / range, for the next frame */
+    memset(hist, 0, sizeof(hist));
+
+    /* fit into the LiveView area, keep the aspect ratio; 2x2 blocks */
+    int ow = os.x_ex & ~1, oh = os.y_ex & ~1;
+    int dw = ow, dh = rh * ow / rw;
+    if (dh > oh)
+    {
+        dh = oh;
+        dw = rw * oh / rh;
+    }
+    dw &= ~1; dh &= ~1;
+    int dx0 = (os.x0 + (ow - dw) / 2) & ~1;
+    int dy0 = (os.y0 + (oh - dh) / 2) & ~1;
+
+    /* raw column of each block (even, so x / x+1 cover both Bayer columns) */
+    static uint16_t col[1024];
+    int nb = MIN(dw / 2, (int)COUNT(col));
+    for (int i = 0; i < nb; i++)
+        col[i] = MIN((rx + i * 2 * rw / dw) & ~1, raw_info.width - 2);
+
+    /* ML's overlay view: leave the ML info bars (32 px each) alone, otherwise
+     * they flicker in whenever lvinfo redraws them */
+    int bar_t = -100, bar_b = -100;
+    extern int get_ml_topbar_pos();
+    extern int get_ml_bottombar_pos();
+    if (raw_preview_ml_view())
+    {
+        bar_t = get_ml_topbar_pos();
+        bar_b = get_ml_bottombar_pos();
+    }
+
+    for (int y = os.y0; y < os.y_max; y += 2)
+    {
+        if ((y + 1 >= bar_t && y < bar_t + 32) || (y + 1 >= bar_b && y < bar_b + 32))
+            continue;
+        uint8_t * r0 = bvram + y * BMPPITCH;
+        uint8_t * r1 = r0 + BMPPITCH;
+        int last = (y + 1 >= os.y_max);
+        if (y < dy0 || y >= dy0 + dh)
+        {
+            memset(r0 + os.x0, COLOR_BLACK, os.x_ex);
+            if (!last) memset(r1 + os.x0, COLOR_BLACK, os.x_ex);
+            continue;
+        }
+        if (dx0 > os.x0)
+        {
+            memset(r0 + os.x0, COLOR_BLACK, dx0 - os.x0);
+            memset(r0 + dx0 + dw, COLOR_BLACK, os.x_max - dx0 - dw);
+            if (!last)
+            {
+                memset(r1 + os.x0, COLOR_BLACK, dx0 - os.x0);
+                memset(r1 + dx0 + dw, COLOR_BLACK, os.x_max - dx0 - dw);
+            }
+        }
+
+        /* even row + odd row: the diagonal pair is gray whatever the Bayer phase */
+        int ys = MIN((ry + (y - dy0) * rh / dh) & ~1, raw_info.height - 2);
+        const uint8_t * l0 = buf + ys * raw_info.pitch;
+        const uint8_t * l1 = l0 + raw_info.pitch;
+        for (int i = 0; i < nb; i++)
+        {
+            int xs = col[i];
+            int v = (raw_unpack_pixel(l0, xs, bpp) + raw_unpack_pixel(l1, xs + 1, bpp)) / 2 - black;
+            v = COERCE(v, 0, range);
+            hist[v * 255 / range]++;
+            /* v <= hi keeps v * gain within 1023 << 16 (no overflow) */
+            uint8_t g = lut[(MIN(v, hi) * gain) >> 16];
+            int x = dx0 + i * 2;
+            r0[x] = r0[x + 1] = g;
+            if (!last) r1[x] = r1[x + 1] = g;
+        }
+    }
+
+    /* keep the Canon button area see-through, with an outline */
+    if (hw > 0 && hh > 0)
+    {
+        for (int y = hy; y < hy + hh && y < os.y_max; y++)
+            memset(bvram + y * BMPPITCH + hx, COLOR_EMPTY, hw);
+        bmp_draw_rect(COLOR_WHITE, hx, hy, hw - 1, hh - 1);
+    }
+
+    /* 98th percentile -> bright level for the next frame */
+    uint32_t total = 0, acc = 0;
+    for (int i = 0; i < 256; i++) total += hist[i];
+    int p98 = 255;
+    for (int i = 0; i < 256; i++)
+    {
+        acc += hist[i];
+        if (acc * 100 >= total * 98) { p98 = i; break; }
+    }
+    hi = (p98 + 1) * range / 256;
+
+    ml_refresh_display_needed = 1;
+    return get_ms_clock() - t0;
+}
+
 #ifdef CONFIG_RAW_LIVEVIEW
 static void raw_lv_enable()
 {

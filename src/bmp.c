@@ -117,11 +117,27 @@ static uint8_t *bmp_vram_shadow = NULL;  /* indexed pixels last written to RGBA 
 static int rgba_shadow_valid = 0;
 static int rgba_refresh_count = 0;
 #endif
+
+/* see bmp_request_full_rgba_write() */
+static volatile int rgba_write_all_request = 0;
 // SJE what is an appropriate priority for this task?
 TASK_CREATE( "redraw_task", refresh_yuv_from_rgb_task, 0, 0x1e, 0x1000 );
 #endif
 // SJE should this global live in bmp.c?
 uint32_t ml_refresh_display_needed = 0;
+
+/* Outside ML's overlay view the RGBA refresh skips transparent pixels, so
+ * erasing (e.g. the magnify framing preview in Canon's info view) would
+ * never reach the screen. One-shot: the next refresh writes every pixel.
+ * Does nothing on cameras without an RGBA layer. */
+void bmp_request_full_rgba_write()
+{
+#ifdef FEATURE_VRAM_RGBA
+    rgba_write_all_request = 1;
+#endif
+    ml_refresh_display_needed = 1;
+}
+
 #ifdef CONFIG_RGBA_REFRESH_LOCKED
 struct semaphore *rgba_draw_sem = NULL;   /* ML menu redraw vs RGBA refresh */
 #endif
@@ -223,7 +239,9 @@ void refresh_yuv_from_rgb(void)
     }
 
 #if !defined(CONFIG_INSTALLER)
-    if(zebra_should_run()){
+    int write_all = rgba_write_all_request;
+    rgba_write_all_request = 0;
+    if(zebra_should_run() || write_all){
 #ifdef CONFIG_RGBA_REFRESH_DIFF
         /* Writes to the RGBA layer can be slow (~37 ms for a full 960x540
          * copy on M200): only write 4-pixel groups that changed since the

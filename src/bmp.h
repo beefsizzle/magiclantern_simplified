@@ -36,6 +36,8 @@
 extern int bmp_enabled;
 
 extern uint32_t ml_refresh_display_needed;
+/* next RGBA refresh writes transparent pixels too (erasing outside ML view) */
+void bmp_request_full_rgba_write();
 
 /** Returns a pointer to the real BMP vram (or to idle BMP vram) */
 uint8_t * bmp_vram(void);

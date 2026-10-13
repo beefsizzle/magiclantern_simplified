@@ -584,6 +584,64 @@ static void refresh_cropmarks()
     }
 }
 
+/* DIGIC 6+ have no display filter for the framing preview. In Canon's
+ * magnify (x5/x10) the raw buffer is a 1:1 strip (M200: 4288x1202) while
+ * the screen shows the small focus area, so the recorded window can't be
+ * seen: draw a gray preview of it into the ML overlay instead.
+ * Preview = Canon turns it off. */
+static volatile int magnify_preview_shown = 0;
+
+/* M200: Canon's magnify touch button (bottom right in Canon's info views,
+ * cycles x5 / x10 / off), in ML's 720x480 overlay coordinates. ML's own
+ * view (Canon's clean screen) has no touch buttons. */
+#define has_magnify_button (is_camera("M200", "*"))
+#define MAGNIFY_BTN_X 618
+#define MAGNIFY_BTN_Y 350
+#define MAGNIFY_BTN_W 102
+#define MAGNIFY_BTN_H 72
+
+static void magnify_preview_task()
+{
+    TASK_LOOP
+    {
+        int want = raw_video_enabled && lv && lv_dispsize > 1 && !PREVIEW_CANON &&
+                   !gui_menu_shown() && display_is_on() && raw_lv_is_enabled() &&
+                   res_x && res_y;
+        if (want)
+        {
+            /* leave Canon's magnify button visible and usable */
+            int hx = 0, hy = 0, hw = 0, hh = 0;
+            if (has_magnify_button && !raw_preview_ml_view())
+            {
+                hx = MAGNIFY_BTN_X; hy = MAGNIFY_BTN_Y; hw = MAGNIFY_BTN_W; hh = MAGNIFY_BTN_H;
+            }
+            take_semaphore(settings_sem, 0);
+            int ms = raw_preview_gray_bmp(skip_x, skip_y, res_x, res_y, hx, hy, hw, hh);
+            give_semaphore(settings_sem);
+            /* once drawn, erase it when leaving, even if a later frame fails */
+            if (ms >= 0)
+                magnify_preview_shown = 1;
+            /* leave the CPU to the recorder */
+            msleep(RAW_IS_RECORDING ? 500 : 60);
+        }
+        else
+        {
+            if (magnify_preview_shown)
+            {
+                magnify_preview_shown = 0;
+                if (!gui_menu_shown())
+                {
+                    bmp_fill(COLOR_EMPTY, os.x0, os.y0, os.x_ex, os.y_ex);
+                    /* also in Canon's info view, where erasing is skipped */
+                    bmp_request_full_rgba_write();
+                }
+                redraw();
+            }
+            msleep(200);
+        }
+    }
+}
+
 static int calc_res_y(int res_x, int max_res_y, int num, int den, float squeeze)
 {
     int res_y;
@@ -4656,6 +4714,9 @@ static unsigned int raw_rec_init()
         write_queue_sem = create_named_semaphore("queue_sem", SEM_CREATE_UNLOCKED);
 
     ASSERT(((uint32_t)task_create("compress_task", 0x0F, 0x1000, compress_task, (void*)0) & 1) == 0);
+
+    if (get_digic_version() > 5)
+        task_create("magnify_preview", 0x1e, 0x1000, magnify_preview_task, 0);
 
     return 0;
 }

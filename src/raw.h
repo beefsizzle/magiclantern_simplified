@@ -104,6 +104,11 @@ void raw_set_pixel(int x, int y, int value);
 /* get a pixel from a custom raw buffer (not from the main one) */
 int raw_get_pixel_ex(void* raw_buffer, int x, int y);
 
+/* gray framing preview of a raw area into the ML overlay (DIGIC 6+, any bpp) */
+int raw_preview_gray_bmp(int rx, int ry, int rw, int rh, int hx, int hy, int hw, int hh);
+/* ML's overlay view is showing (also at x10 zoom and while recording) */
+int raw_preview_ml_view();
+
 /* get a grayscale pixel according to some projection from RGB */
 int raw_get_gray_pixel(int x, int y, int gray_projection);
 #define GRAY_PROJECTION_RED 0
