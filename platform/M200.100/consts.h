@@ -144,6 +144,10 @@
 // 0x048B0E54 (1164 rows x 3668 bytes in FHD), PackUnpack MMIO 0xD0422224 =
 // 0xC0100020 (14-bit, as M50).
 #define RAW_LV_EDMAC_CHANNEL_ADDR 0xd0420200
+// Mem1Path state S (= *(E07CB430)): +0x10/+0x14 raw width / height, +0x58
+// raw buffer. Its EDMAC ch3 completion callback E07CACDC calls an optional
+// hook S+0x64(S+0x68), which nothing in Canon's ROM sets (lv-vsync.c).
+#define RAW_LV_MEM1_STATE_ADDR 0xF944
 // Not identified on M200 (M50/200D use an unverified 0xD0008030). 0 makes
 // shamem_read() return 0, and raw.c then skips the correction.
 #define SHAD_GAIN_REGISTER 0x0
