@@ -193,6 +193,10 @@ extern int XimrExe(void *);
 extern struct semaphore *winsys_sem;
 void refresh_yuv_from_rgb(void)
 {
+    /* clear the request before converting: drawing done while we convert
+     * sets it again instead of being dropped */
+    ml_refresh_display_needed = 0;
+
     // get our indexed buffer, convert into our real rgb buffer
     uint8_t *b = bmp_vram_indexed;
     uint32_t *rgb_data = NULL;
@@ -266,7 +270,6 @@ void refresh_yuv_from_rgb(void)
     XimrExe((void *)XIMR_CONTEXT);
     give_semaphore(winsys_sem);
 #endif
-    ml_refresh_display_needed = 0;
 }
 
 void rgba_buffer_clear()
