@@ -392,6 +392,12 @@ static inline uint8_t * overlay_bvram(void)
 #endif
 }
 
+/* Zebras are redrawn this many times less often while recording, to leave
+ * CPU for the H.264 encoder on older cameras. */
+#ifndef ZEBRA_RECORDING_SLOWDOWN
+#define ZEBRA_RECORDING_SLOWDOWN 5
+#endif
+
 static uint8_t* bvram_mirror_start = 0;
 static uint8_t* bvram_mirror = 0;
 uint8_t* get_bvram_mirror() { return bvram_mirror; }
@@ -4202,7 +4208,7 @@ livev_hipriority_task( void* unused )
                 BMP_LOCK(
                     if (lv)
                         draw_zebra_and_focus(
-                            k % ((focus_peaking ? 5 : 3) * (RECORDING ? 5 : 1)) == 0, /* should redraw zebras? */
+                            k % ((focus_peaking ? 5 : 3) * (RECORDING ? ZEBRA_RECORDING_SLOWDOWN : 1)) == 0, /* should redraw zebras? */
                             k % 2 == 1  /* should redraw focus peaking? */
                         ); 
                 )

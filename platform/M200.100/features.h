@@ -16,6 +16,12 @@
 #define FEATURE_SHOW_CPU_USAGE
 #define FEATURE_SHOW_GUI_EVENTS
 
+#define FEATURE_GLOBAL_DRAW
+#define FEATURE_CROPMARKS
+
+// Zebras from the LV image (luma/RGB); focus peaking needs display filters
+#define FEATURE_ZEBRA
+
 // We can't yet rely on image capture.
 #define CONFIG_IMAGE_CAPTURE_NOT_WORKING
 

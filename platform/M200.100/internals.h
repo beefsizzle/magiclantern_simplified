@@ -19,6 +19,9 @@
 /** ML menu redraw and RGBA refresh exclude each other (bmp.c) */
 #define CONFIG_RGBA_REFRESH_LOCKED
 
+/** H.264 is encoded in hardware: redraw zebras more often while recording */
+#define ZEBRA_RECORDING_SLOWDOWN 2
+
 /** LiveView's EVF_STATE uses Canon's newer state framework, not
  * CreateStateObject, so the state object hooks don't apply. */
 //#define CONFIG_STATE_OBJECT_HOOKS

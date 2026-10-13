@@ -374,7 +374,7 @@ void _update_vram_params()
     os.off_43 = 0;
     os.off_169 = 0;
     os.off_1610 = 0;
-#elif defined(CONFIG_M6II)
+#elif defined(CONFIG_M6II) || defined(CONFIG_M200)
     // false, depends on Panel, HDMI, EVF.
     vram_lv.width = 736;
     vram_lv.height = 480;
