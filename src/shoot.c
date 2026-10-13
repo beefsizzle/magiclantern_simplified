@@ -858,6 +858,17 @@ int focus_box_get_raw_crop_offset(int* delta_x, int* delta_y)
     /* are we in x5/x10 zoom mode? */
     if (lv && lv_dispsize > 1)
     {
+        #ifdef CONFIG_RAW_LV_ZOOM_VIEW_POS
+        /* the camera code knows where Canon's view is in the raw frame */
+        int here_x, here_y;
+        if (raw_lv_zoom_view_center(&here_x, &here_y))
+        {
+            *delta_x = raw_info.active_area.x1 + raw_info.jpeg.width / 2 - here_x;
+            *delta_y = raw_info.active_area.y1 + raw_info.jpeg.height / 2 - here_y;
+            return 1;
+        }
+        #endif
+
         #ifdef CONFIG_5D3
         /* might be generic, need to check */
         uint32_t is_centered_zoom_mode = shamem_read(0xc0f383d4) & 

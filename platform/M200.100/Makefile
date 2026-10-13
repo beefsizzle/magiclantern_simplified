@@ -18,7 +18,7 @@ CFLAGS_PLATFORM = -mthumb -mlong-calls
 PLATFORM_ARCH = armv7-a
 
 ML_BOOT_OBJ = boot-d678.o
-ML_SRC_EXTRA_OBJS += $(BUILD_DIR)/function_overrides.o $(BUILD_DIR)/lv-vsync.o $(BUILD_DIR)/edmac-d8.o $(BUILD_DIR)/edmac-raw-patch.o
+ML_SRC_EXTRA_OBJS += $(BUILD_DIR)/function_overrides.o $(BUILD_DIR)/lv-vsync.o $(BUILD_DIR)/edmac-d8.o $(BUILD_DIR)/edmac-raw-patch.o $(BUILD_DIR)/lv-zoom.o
 
 include ../Makefile
 .DEFAULT_GOAL := $(BUILD_DIR)/cam_complete

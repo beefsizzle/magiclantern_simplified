@@ -173,6 +173,10 @@ void raw_set_dirty(void);
 /* for x5 crop mode: get the offset (in pixels) between raw and yuv frames. Return: 1=OK, 0=failed. */
 int focus_box_get_raw_crop_offset(int* delta_x, int* delta_y); /* this is in shoot.c */
 
+/* where Canon's magnified view is centred in the raw frame (camera code,
+ * CONFIG_RAW_LV_ZOOM_VIEW_POS); 0 if unknown */
+int raw_lv_zoom_view_center(int* x, int* y);
+
 /* called from state-object.c */
 void raw_lv_vsync();
 

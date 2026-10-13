@@ -158,6 +158,11 @@
 // shamem_read() return 0, and raw.c then skips the correction.
 #define SHAD_GAIN_REGISTER 0x0
 
+// Canon's imager DataStore: the imager writes sensor readout parameters into
+// it (FUN_e055010c: memcpy to base + offset under a spinlock). lv-zoom.c
+// reads the magnified view position from it.
+#define IMAGER_DATASTORE_ADDR 0x478A8
+
 // LiveView frame counter (read only). Canon's EvfDev registers a base frame
 // rate callback (RegisterBaseFrameRateCBR E067BB46, from evfdevSyncStart
 // E0081BBA) at E0081528, which increments 0x9308+0xC (FUN_e068db3a) once per

@@ -50,6 +50,10 @@
  * width instead (raw.c) */
 #define CONFIG_EDMAC_RAW_PATCH
 
+/** Canon's magnified view is not centred in the raw buffer; lv-zoom.c finds
+ * it, so mlv_lite records what Canon shows in x5 / x10 */
+#define CONFIG_RAW_LV_ZOOM_VIEW_POS
+
 /** "All shoot memory" (shoot_malloc_suite(0), used by mlv_lite) is this many
  * MB instead of autodetected. The autodetect makes requests that fail, and
  * Canon keeps a failed request queued until enough memory is free; when
