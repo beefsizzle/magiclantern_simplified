@@ -6293,6 +6293,51 @@ static struct longpress erase_longpress = {
 };
 #endif
 
+#if defined(CONFIG_M200)
+/* M200: magnify is a touch button that Canon's clean screen (ML's overlay
+ * view) doesn't have. Long press RIGHT cycles the LV zoom 1 -> 5 -> 10 -> 1,
+ * or 1 <-> 5 with raw video on (x5 and x10 record the same 1:1 window, and
+ * mlv_lite's framing preview hides Canon's x10 view). The longpress check
+ * runs from a timer, so a task changes the property. */
+extern int raw_lv_is_enabled();
+extern void set_lv_zoom(int zoom);
+static struct semaphore * lv_zoom_sem = NULL;
+
+static void lv_zoom_task()
+{
+    lv_zoom_sem = create_named_semaphore("lv_zoom", 0);
+    TASK_LOOP
+    {
+        if (take_semaphore(lv_zoom_sem, 0) != 0)
+            continue;
+        if (!lv || RECORDING || gui_menu_shown())
+            continue;
+
+        int zoom = raw_lv_is_enabled() ? (lv_dispsize == 1 ? 5 : 1)
+                                       : (lv_dispsize == 1 ? 5 : lv_dispsize == 5 ? 10 : 1);
+        set_lv_zoom(zoom);
+    }
+}
+TASK_CREATE("lv_zoom", lv_zoom_task, 0, 0x1c, 0x800);
+
+static int lv_zoom_long_cbr()
+{
+    if (lv_zoom_sem)
+        give_semaphore(lv_zoom_sem);
+    return 0;   /* nothing to send to Canon */
+}
+
+static struct longpress right_longpress = {
+    .long_btn_press     = BGMT_PRESS_RIGHT,     /* not sent: long_cbr returns 0 */
+    .long_cbr           = lv_zoom_long_cbr,
+    .short_btn_press    = BGMT_PRESS_RIGHT,     /* short press => regular RIGHT */
+    .short_btn_unpress  = BGMT_UNPRESS_RIGHT,
+    .short_outside_menu = 1,
+    .pos_x = 670,
+    .pos_y = 343,
+};
+#endif
+
 #ifdef BGMT_Q_SET
 static struct longpress qset_longpress = {
     .long_btn_press     = BGMT_Q_SET,           /* long press opens Q-menu */
@@ -6522,6 +6567,24 @@ int handle_longpress_events(struct event * event)
     else if (event->param == BGMT_UNPRESS_DOWN)
     {
         erase_longpress.pressed = 0;
+    }
+#endif
+
+#if defined(CONFIG_M200)
+    /* LV zoom by a long press on RIGHT (outside menus, in LiveView) */
+    if (event->param == BGMT_PRESS_RIGHT)
+    {
+        if (lv && gui_state == GUISTATE_IDLE && !gui_menu_shown() && !IS_FAKE(event) && !RECORDING)
+        {
+            right_longpress.pressed = 1;
+            right_longpress.count = 0;
+            delayed_call(20, longpress_check, &right_longpress);
+            return 0;
+        }
+    }
+    else if (event->param == BGMT_UNPRESS_RIGHT)
+    {
+        right_longpress.pressed = 0;
     }
 #endif
 

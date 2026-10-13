@@ -36,6 +36,9 @@ const uint32_t prop_handler_deny[] =
 // allow writes / allow prop_request_change() for these:
 const uint32_t prop_write_allow[] =
 {
+    // LiveView zoom (1 / 5 / 10), 8 bytes {zoom, 0}: the same values Canon
+    // writes from its magnify touch button. Runtime LV state, not a setting.
+    PROP_LV_DISPSIZE,
 };
 
 // anything not listed above will allow reads but not writes

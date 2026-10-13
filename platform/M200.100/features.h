@@ -39,5 +39,6 @@
 #define CONFIG_CRASH_LOG
 #define CONFIG_AUTOBACKUP_ROM
 
-// No property writes on new ports until each one is checked
-#undef CONFIG_PROP_REQUEST_CHANGE
+// Property writes: on DIGIC 6/7/8 only the properties in
+// property_whitelist.h prop_write_allow[] are written (property.c)
+#define CONFIG_PROP_REQUEST_CHANGE
