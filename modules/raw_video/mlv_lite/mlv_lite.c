@@ -567,7 +567,9 @@ static inline int pre_recorded_frames()
 
 static void refresh_cropmarks()
 {
-    if (lv_dispsize > 1 || raw_rec_should_preview() || !raw_video_enabled)
+    /* the raw -> screen mapping is only valid once raw LV runs */
+    if (lv_dispsize > 1 || raw_rec_should_preview() || !raw_video_enabled ||
+        !raw_lv_is_enabled() || !lv2raw.sx || !lv2raw.sy)
     {
         reset_movie_cropmarks();
     }
@@ -2118,6 +2120,14 @@ unsigned int raw_rec_polling_cbr(unsigned int unused)
     if (RAW_IS_IDLE && !gui_menu_shown())
     {
         refresh_raw_settings(0);
+
+        /* and the crop frame shown in LiveView (otherwise only refreshed
+         * from the menu), e.g. after switching between FHD and 4K */
+        static int aux_crop = INT_MIN;
+        if (should_run_polling_action(500, &aux_crop))
+        {
+            refresh_cropmarks();
+        }
     }
     
     /* update status messages */
@@ -4387,6 +4397,10 @@ static int raw_rec_should_preview(void)
 {
     if (!raw_video_enabled) return 0;
     if (!is_movie_mode()) return 0;
+
+    /* the framing preview is a display filter, which only DIGIC 4/5 have;
+     * elsewhere asking for it would just hide the crop frame (cropmarks) */
+    if (get_digic_version() > 5) return 0;
 
     /* keep x10 mode unaltered, for focusing */
     if (lv_dispsize == 10) return 0;
