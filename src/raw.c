@@ -796,7 +796,14 @@ static int raw_lv_get_resolution(int* width, int* height)
     if (!lv_raw_size) return 0;
 
     int pitch = lv_raw_size & 0xFFFF;
+    #if defined(RAW_LV_MEM1_STATE_ADDR)
+    /* the row length follows the bit depth (see raw_lv_request_bpp) */
+    uint32_t pack = MEM(PackMode_Field_ADDR_For_RAW_LV_EDMAC_CHANNEL);
+    int bits = (pack == 1) ? 12 : (pack == 0) ? 10 : 14;
+    *width = pitch * 8 / bits;
+    #else
     *width = pitch * 8 / 14;
+    #endif
 
     /* 5D2 uses lv_raw_size >> 16, 5D3 uses lv_raw_height, so this hopefully covers both cases */
     *height = MAX((lv_raw_height & 0xFFFF) + 1, ((lv_raw_size >> 16) & 0xFFFF) + 1);
@@ -2215,10 +2222,17 @@ int _raw_lv_get_iso_post_gain()
 
 #endif // CONFIG_EDMAC_RAW_SLURP
 
+#if defined(RAW_LV_MEM1_STATE_ADDR)
+static volatile int mem1_bpp_lost = 0;
+#endif
+
 int raw_lv_settings_still_valid()
 {
     /* should be fast enough for vsync calls */
     if (!lv_raw_enabled) return 0;
+    #if defined(RAW_LV_MEM1_STATE_ADDR)
+    if (mem1_bpp_lost) return 0;
+    #endif
     int w, h;
     if (!raw_lv_get_resolution(&w, &h)) return 0;
     if (w != raw_info.width || h != raw_info.height) return 0;
@@ -2543,11 +2557,21 @@ static void raw_lv_enable()
 #endif
 }
 
+#if defined(RAW_LV_MEM1_STATE_ADDR)
+static int mem1_set_bpp(int bpp);
+#endif
+
 static void raw_lv_disable()
 {
     ASSERT(!lv_raw_gain);
     lv_raw_enabled = 0;
     raw_info.buffer = 0;
+
+#if defined(RAW_LV_MEM1_STATE_ADDR)
+    /* make sure Canon is back on its own 14-bit settings */
+    mem1_set_bpp(14);
+    raw_info.bits_per_pixel = 14;
+#endif
 
 #ifndef CONFIG_EDMAC_RAW_SLURP
     call("lv_save_raw", 0);
@@ -2647,9 +2671,109 @@ void raw_lv_release()
     give_semaphore(raw_sem);
 }
 
+#if defined(RAW_LV_MEM1_STATE_ADDR)
+/* DIGIC 8 (M200): Canon programs the raw EDMAC row length every frame as
+ * (width * 7) >> 2, from a width field it writes only on LV setup (see
+ * consts.h). For 12/10-bit we store a width W' with (W' * 7) >> 2 ==
+ * W * bpp / 8, together with the PackUnpack bit depth, with interrupts off
+ * so Canon never uses one without the other. */
+static int mem1_field = 0;              /* width field we changed, 0 = none */
+static uint32_t mem1_width14 = 0;       /* Canon's width */
+static uint32_t mem1_width_fake = 0;    /* the width we stored */
+
+static int mem1_fake_width(uint32_t w, int bpp)
+{
+    if ((w * bpp) % 8) return 0;
+    int pitch = w * bpp / 8;
+    for (int c = (int)(w * bpp / 14) - 2; c <= (int)(w * bpp / 14) + 3; c++)
+        if (((c * 7) >> 2) == pitch) return c;
+    return 0;   /* e.g. 10-bit at 2096 wide: no exact value */
+}
+
+/* returns the bit depth in effect afterwards */
+static int mem1_set_bpp(int bpp)
+{
+    const uint32_t S = RAW_LV_MEM1_STATE_ADDR;
+    const uint32_t PACK = PackMode_Field_ADDR_For_RAW_LV_EDMAC_CHANNEL;
+
+    /* back to Canon's values first */
+    if (mem1_field)
+    {
+        uint32_t old = cli();
+        if (MEM(S + mem1_field) == mem1_width_fake)
+            MEM(S + mem1_field) = mem1_width14;
+        MEM(PACK) = 2;
+        sei(old);
+        mem1_field = 0;
+    }
+    else if (MEM(PACK) != 2)
+    {
+        MEM(PACK) = 2;
+    }
+
+    if (bpp != 12 && bpp != 10)
+        return 14;
+
+    /* which width field is Canon using? (S+0x10/0x14 = current width/height) */
+    uint32_t w = MEM(S + 0x10), h = MEM(S + 0x14);
+    const int fields[] = { 0x18, 0x20, 0x2C, 0x34 };
+    int field = 0;
+    for (int i = 0; i < COUNT(fields); i++)
+        if (MEM(S + fields[i]) == w && MEM(S + fields[i] + 4) == h)
+            { field = fields[i]; break; }
+
+    int fake = mem1_fake_width(w, bpp);
+    if (!field || !fake)
+        return 14;
+
+    uint32_t old = cli();
+    MEM(PACK) = (bpp == 12) ? 1 : 0;
+    MEM(S + field) = fake;
+    sei(old);
+
+    mem1_field = field;
+    mem1_width14 = w;
+    mem1_width_fake = fake;
+    return bpp;
+}
+
+/* Called from the vsync task: if LV was set up again while 12/10-bit was
+ * active (Canon rewrote the width), go back to 14-bit at once and mark the
+ * raw settings invalid, so recorders stop. */
+void raw_lv_mem1_check()
+{
+    if (!mem1_field)
+        return;
+    const uint32_t S = RAW_LV_MEM1_STATE_ADDR;
+    if (MEM(S + mem1_field) != mem1_width_fake)
+    {
+        MEM(PackMode_Field_ADDR_For_RAW_LV_EDMAC_CHANNEL) = 2;
+        mem1_field = 0;
+        mem1_bpp_lost = 1;
+    }
+}
+#endif
+
 void raw_lv_request_bpp(int bpp)
 {
     take_semaphore(raw_sem, 0);
+
+    #if defined(RAW_LV_MEM1_STATE_ADDR)
+    {
+        int applied = mem1_set_bpp(bpp);
+        mem1_bpp_lost = 0;
+        if (applied != raw_info.bits_per_pixel)
+        {
+            raw_info.bits_per_pixel = applied;
+            raw_info.pitch = raw_info.width * applied / 8;
+            raw_info.frame_size = raw_info.pitch * raw_info.height;
+            /* Canon programs the new row length from the next frame */
+            wait_lv_frames(2);
+        }
+        give_semaphore(raw_sem);
+        return;
+    }
+    #endif
 
 #if defined(CONFIG_DIGIC_45) || defined(CONFIG_200D) || defined(CONFIG_6D2) || defined(CONFIG_7D2)
     /* raw bit depth setup is done from PACK32_MODE register (mask 0x131) */

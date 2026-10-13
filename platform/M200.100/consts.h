@@ -147,7 +147,13 @@
 // Mem1Path state S (= *(E07CB430)): +0x10/+0x14 raw width / height, +0x58
 // raw buffer. Its EDMAC ch3 completion callback E07CACDC calls an optional
 // hook S+0x64(S+0x68), which nothing in Canon's ROM sets (lv-vsync.c).
+// Mem1Path (E07CB1D8) programs the raw EDMAC row length every frame as
+// (width * 7) >> 2, with the width copied from S+0x18/0x20/0x2C/0x34, which
+// Canon writes only on evfdevSetPath (raw.c uses that for 12-bit).
 #define RAW_LV_MEM1_STATE_ADDR 0xF944
+// Bit depth field of Mem1Path's PackUnpack config (array at S+0x6C, [2]:
+// 2 = 14-bit, 1 = 12, 0 = 10), re-applied by Canon every frame. M50: 0x127B4.
+#define PackMode_Field_ADDR_For_RAW_LV_EDMAC_CHANNEL 0xF9B8
 // Not identified on M200 (M50/200D use an unverified 0xD0008030). 0 makes
 // shamem_read() return 0, and raw.c then skips the correction.
 #define SHAD_GAIN_REGISTER 0x0

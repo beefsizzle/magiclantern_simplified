@@ -106,6 +106,8 @@ static void lv_vsync_task()
         }
 
         #ifdef RAW_LV_MEM1_STATE_ADDR
+        extern void raw_lv_mem1_check();
+        raw_lv_mem1_check();
         mem1_hook_check();
 
         /* raw frames arriving: time the frames from the raw hook */
