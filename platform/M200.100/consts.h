@@ -138,6 +138,13 @@
 
 #define YUV422_HD_BUFFER_DMA_ADDR 0x0 // it expects this to be shamem_read(some_DMA_ADDR)
 
+// LiveView frame counter (read only). Canon's EvfDev registers a base frame
+// rate callback (RegisterBaseFrameRateCBR E067BB46, from evfdevSyncStart
+// E0081BBA) at E0081528, which increments 0x9308+0xC (FUN_e068db3a) once per
+// LV frame and posts event 0xD to EVFDEV. Cleared on evfdevSetPath
+// (FUN_e068db2c), read by FUN_e068db34. Used as vsync source (lv-vsync.c).
+#define LV_FRAME_COUNTER_ADDR 0x9314
+
 /* WRONG! */
 #define HALFSHUTTER_PRESSED         0
 /* kitor: I was unable to find any related stuff from 200D

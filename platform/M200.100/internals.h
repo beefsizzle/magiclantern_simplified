@@ -30,6 +30,9 @@
  * CreateStateObject, so the state object hooks don't apply. */
 //#define CONFIG_STATE_OBJECT_HOOKS
 
+/** Vsync from Canon's LV frame counter instead (lv-vsync.c) */
+#define CONFIG_LV_VSYNC_POLL
+
 // has inter-core RPC (so far this has always been dependent on SGI, 0xc)
 #define CONFIG_RPC
 
